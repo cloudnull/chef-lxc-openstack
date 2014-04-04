@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+
+# Copyright 2013, Rackspace US, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author Kevin.Carter@Rackspace.com
+
+# chkconfig: 2345 99 99
+# Description: Build and Rebuild a virtual environment
+
+### BEGIN INIT INFO
+# Provides:
+# Required-Start: $remote_fs $network $syslog
+# Required-Stop: $remote_fs $syslog
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: Rackspace Appliance init script
+# Description: Build and Rebuild a virtual environment
+### END INIT INFO
+
+# Set the Path
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# What is the Name of this Script, and what are we starting
+PROGRAM="RACKSPACE_PRIVATE_CLOUD:"
+
+# Truncate the contents of our net rules
+function udev_truncate() {
+    cat > /etc/udev/rules.d/70-persistent-net.rules<<EOF
+# Net Device Rules
+EOF
+}
+
+# Stop Swap
+function stop_swap() {
+  SWAPFILE="/tmp/SwapFile"
+  echo "Stopping Swap"
+  swapoff -a
+  sleep 2
+
+  if [ -f "${SWAPFILE}" ];then
+    echo "Removing Swap File."
+    rm ${SWAPFILE}
+  fi
+}
+
+# Stop the VM services
+function stop_vm() {
+  # Stop all containers
+  for i in $(/usr/bin/lxc-ls); do /usr/bin/lxc-stop -n $i || true; done
+
+  # Flush all of the routes on the system
+  ip route flush all
+  sync
+}
+
+# Service functions
+case "$1" in
+  start)
+    clear
+    echo "${PROGRAM} is Initializing..."
+    /etc/init.d/networking restart
+    /opt/swap.sh
+    /opt/cinder.sh
+    /opt/motd.sh
+    for i in $(/usr/bin/lxc-ls); do /usr/bin/lxc-start -d -n $i || true; done
+  ;;
+  stop)
+    echo "${PROGRAM} is Shutting Down..."
+    stop_vm
+    stop_swap
+    udev_truncate
+  ;;
+  package-instance)
+    stop_vm
+    stop_swap
+    udev_truncate
+
+    echo "Performing A Zero Fill"
+    set +e
+    pushd /tmp
+    cat /dev/zero > zero.fill
+    sync
+    sleep 1
+    rm -f zero.fill
+    sync
+    sleep 1
+    popd
+    set -e
+    sync
+    sleep 1
+
+    # Nuke our history
+    echo '' | tee /root/.bash_history
+    history -c
+    sync
+
+    shutdown -P now
+  ;;
+  *)
+    USAGE="{start|stop|package-instance}"
+    echo "Usage: $0 ${USAGE}" >&2
+    exit 1
+  ;;
+esac
