@@ -12,12 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Variables:
+#   PASSWD=Set the password, if not set it will be generated.
+#   CONTAINER_USER=The name of the user that will be built within the container.
+#   COOKBOOK_VERSION=Version number of the cookbooks being used for deployment.
+#   PRIMARY_DEVICE=The device name for the primary network interface. 
+#                  This is the network device that will the default gateway.
+#   NEUTRON_DEVICE=The device name that neutron will be attached to.
+
 set -e -u -x
 
 WHOAMI=$(whoami)
 PASSWD=${PASSWD:-"secrete"}
 CONTAINER_USER=${CONTAINER_USER:-"openstack"}
-COOKBOOK_VERSION="v4.2.2"
+COOKBOOK_VERSION=${COOKBOOK_VERSION:-"v4.2.2"}
 PRIMARY_DEVICE=${PRIMARY_DEVICE:-"eth0"}
 NEUTRON_DEVICE=${NEUTRON_DEVICE:-"eth1"}
 
@@ -355,6 +363,9 @@ rm cirros-0.3.1-x86_64-disk.img
 
 # Add a default Key
 nova keypair-add adminKey --pub-key $HOME/.ssh/id_rsa.pub
+
+# Add a Volume Type
+nova volume-type-create RaxVolType
 
 # Plugin the OVS interface
 ovs-vsctl add-port br-${NEUTRON_DEVICE} ${NEUTRON_DEVICE}
