@@ -138,7 +138,7 @@ The installation also sets up the following:
 
     * A Glance image, named "cirros-image"
 
-    * A Keypair named "adminKey"
+    * A Key Pair named "adminKey"
 
     * A Nova flavor type for "512MB Standard Instance"
 
