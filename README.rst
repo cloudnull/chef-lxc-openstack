@@ -128,20 +128,19 @@ horizon     dashboard
 ==========  ==============
 
 
-The installation also sets up the following
+The installation also sets up the following:
+    * A flat network with a CIDR 172.16.24.0/24 named "raxova"
 
-* A flat network with a CIDR 172.16.24.0/24 named "raxova"
+    * A router named "internalRouter" with the "raxova" network as the attached 
+      interface
 
-* A router named "internalRouter" with the "raxova" network as the attached 
-  interface
+    * A Cinder volume type "RaxVolType"
 
-* A Cinder volume type "RaxVolType"
+    * A Glance image, named "cirros-image"
 
-* A Glance image, named "cirros-image"
+    * A Keypair named "adminKey"
 
-* A Keypair named "adminKey"
-
-* A Nova flavor type for "512MB Standard Instance"
+    * A Nova flavor type for "512MB Standard Instance"
 
 
 Limitations
