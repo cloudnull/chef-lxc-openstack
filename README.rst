@@ -38,7 +38,7 @@ Example Execution
 
 .. code-block:: bash
 
-    git clone https://github.com/cloudnull/c rcbops-lxc-openstack
+    git clone https://github.com/cloudnull/rcbops-lxc-openstack rcbops-lxc-openstack
     pushd rcbops-lxc-openstack
     bash build-ova.sh
     popd
