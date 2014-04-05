@@ -36,6 +36,28 @@ PRIMARY_DEVICE=${PRIMARY_DEVICE:-"eth0"}
 NEUTRON_DEVICE=${NEUTRON_DEVICE:-"eth1"}
 VIRT_TYPE=${VIRT_TYPE:-"qemu"}
 
+
+# Used to retry process that may fail due to random issues.
+function retry_process() {
+  set +e
+  MAX_RETRIES=${MAX_RETRIES:-5}
+  RETRY=0
+
+  # Set the initial return value to failure
+  false
+
+  while [ $? -ne 0 -a ${RETRY} -lt ${MAX_RETRIES} ];do
+    RETRY=$((${RETRY}+1))
+    $@
+  done
+
+  if [ ${RETRY} -eq ${MAX_RETRIES} ];then
+    error_exit "Hit maximum number of retries, giving up..."
+  fi
+  set -e
+}
+
+
 if [ "$WHOAMI" != "root" ];then
   echo "Please escalate to root."
   exit 1
@@ -235,11 +257,15 @@ NOVACP="\${COOKBOOKS}/nova/templates/default/partials"
 VNCCP="\${NOVACP}/vncproxy-options.partial.erb"
 sudo su -c "sed -i 's/xvpvncproxy_host=.*/xvpvncproxy_host=10.0.3.100/' \${VNCCP}"
 sudo su -c "sed -i 's/novncproxy_host=.*/novncproxy_host=10.0.3.100/' \${VNCCP}"
+EOL
+
+echo "Uploading cookbooks"
+retry_process ${USER_SSH} <<EOL
+COOKBOOKS="/opt/rpc/chef-cookbooks/cookbooks"
 sudo su -c "knife cookbook upload -a -o \${COOKBOOKS}"
 EOL
 
 echo "Creating rpcs environment ini"
-
 ${USER_SSH} <<EOL
 # Drop the environment ini in place.
 ERLANG_COOKIE=\$(sudo cat /var/lib/rabbitmq/.erlang.cookie)
@@ -293,7 +319,7 @@ scp env_patch.py ${CONTAINER_USER}@10.0.3.100:/home/${CONTAINER_USER}/env_patch.
 SYS_IP=$(ip a l ${PRIMARY_DEVICE} | grep -w inet | awk -F" " '{print $2}'| sed -e 's/\/.*$//')
 
 # When the perviously patch is taken care of remove the `env_patch.py` script.
-${USER_SSH} <<EOL
+retry_process ${USER_SSH} <<EOL
 mungerator -C rpcs.ini create-env neutron
 python env_patch.py ${CONTAINER_USER} ${SYS_IP}
 sudo su -c "knife environment from file /home/${CONTAINER_USER}/rpcs.json"
@@ -310,12 +336,12 @@ sudo su -c "sshpass -p ${PASSWD} ssh-copy-id root@10.0.3.1"
 EOL
 
 echo "Bootstrapping the controller node"
-${USER_SSH} <<EOL
+retry_process ${USER_SSH} <<EOL
 sudo su -c "knife bootstrap -E rpcs -r role[ha-controller1],role[heat-all] localhost"
 EOL
 
 echo "Bootstrapping the compute, cinder, neutron node"
-${USER_SSH} <<EOL
+retry_process ${USER_SSH} <<EOL
 sudo su -c "knife bootstrap 10.0.3.1 \
                             -E rpcs \
                             -r role[single-network-node],role[single-compute],role[cinder-volume] \
@@ -323,7 +349,7 @@ sudo su -c "knife bootstrap 10.0.3.1 \
 EOL
 
 echo "finallizing the chef run"
-${USER_SSH} <<EOL
+retry_process ${USER_SSH} <<EOL
 sudo su -c "chef-client"
 EOL
 
