@@ -147,5 +147,14 @@ type "KVM" I highly recommend you set the environment variable **VIRT_TYPE** to
 kvm prior to running the ``build-ova.sh`` script. 
 
 
+This script **ONLY** supports the Host Operating System Ubuntu 12.04 Precise 
+Pangolin. **THIS DOES NOT WORK ON RHEL-ish SYSTEMS**.  If the you request 
+RHEL-ish support I will be happy to begin looking into how to extend the 
+present build scripts for RHEL-ish support. For now, if you would like to 
+have a similar like system please use the 
+"https://github.com/cloudnull/rcbops_allinone_inone" script as Ubuntu and 
+RHEL-ish operating systems are fully supported using that script.
+
+
 At no time should you run this for a production setup. This was built ONLY for 
 test / development purposes.
