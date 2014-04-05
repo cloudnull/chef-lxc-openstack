@@ -61,6 +61,9 @@ Variables:
     VIRT_TYPE=The Virtualization type, if your System supports KVM you 
     should set this to "kvm". Default, "qemu"
 
+    MAX_RETRIES=The Max number of times to retry an operation before quiting.
+    The default is set to 5.
+
 
 All variables are *environment variables* and should be set prior to executing the 
 ``build-ova.sh`` script.

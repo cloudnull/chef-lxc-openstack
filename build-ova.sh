@@ -25,6 +25,8 @@
 #   NEUTRON_DEVICE=The device name that neutron will be attached to.
 #   VIRT_TYPE=The Virtualization type, if your System supports KVM 
 #             you should set this to "kvm". Default, "qemu"
+#   MAX_RETRIES=The Max number of times to retry an operation before quiting.
+#               The default is set to 5.
 
 set -e -u -x
 
