@@ -222,6 +222,16 @@ sudo su -c "export COOKBOOK_VERSION=\"${COOKBOOK_VERSION}\"; \
             bash /home/${CONTAINER_USER}/install_all.sh"
 EOL
 
+echo "Patching Nova VNC"
+${USER_SSH} <<EOL
+COOKBOOKS="/opt/rpc/chef-cookbooks/cookbooks"
+NOVACP="\${COOKBOOKS}/nova/templates/default/partials"
+VNCCP="\${NOVACP}/vncproxy-options.partial.erb"
+sudo su -c "sed -i 's/xvpvncproxy_host=.*/xvpvncproxy_host=10.0.3.100/' \${VNCCP}"
+sudo su -c "sed -i 's/novncproxy_host=.*/novncproxy_host=10.0.3.100/' \${VNCCP}"
+sudo su -c "knife cookbook upload -a -o \${COOKBOOKS}"
+EOL
+
 echo "Creating rpcs environment ini"
 ${USER_SSH} <<EOL
 # Drop the environment ini in place.
@@ -270,8 +280,11 @@ EOF
 EOL
 
 echo "Creating rpcs environment"
+scp env_patch.py ${CONTAINER_USER}@10.0.3.100:/home/${CONTAINER_USER}/env_patch.py
+SYS_IP=$(ip a l ${PRIMARY_DEVICE} | grep -w inet | awk -F" " '{print $2}'| sed -e 's/\/.*$//')
 ${USER_SSH} <<EOL
 mungerator -C rpcs.ini create-env neutron
+python env_patch.py ${CONTAINER_USER} ${SYS_IP}
 sudo su -c "knife environment from file /home/${CONTAINER_USER}/rpcs.json"
 EOL
 
