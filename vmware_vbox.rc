@@ -25,19 +25,19 @@
 #             you should set this to "kvm". Default, "qemu"
 
 # Set the system password
-PASSWD="secrete"
+export PASSWD="secrete"
 
 # Set the container user, this user should be an existing system user
-CONTAINER_USER="openstack"
+export CONTAINER_USER="openstack"
 
 # Set the cookbook version
-COOKBOOK_VERSION="v4.2.2"
+export COOKBOOK_VERSION="v4.2.2"
 
 # Set the network device that has the gateway
-PRIMARY_DEVICE="eth1"
+export PRIMARY_DEVICE="eth1"
 
 # Set the network device that neutron will be plugged into
-NEUTRON_DEVICE="eth2"
+export NEUTRON_DEVICE="eth2"
 
 # Set the virt type
-VIRT_TYPE="qemu"
+export VIRT_TYPE="qemu"
