@@ -19,6 +19,8 @@
 #   PRIMARY_DEVICE=The device name for the primary network interface. 
 #                  This is the network device that will the default gateway.
 #   NEUTRON_DEVICE=The device name that neutron will be attached to.
+#   VIRT_TYPE=The Virtualization type, if your System supports KVM 
+#             you should set this to "kvm". Default, "qemu"
 
 set -e -u -x
 
@@ -28,7 +30,7 @@ CONTAINER_USER=${CONTAINER_USER:-"openstack"}
 COOKBOOK_VERSION=${COOKBOOK_VERSION:-"v4.2.2"}
 PRIMARY_DEVICE=${PRIMARY_DEVICE:-"eth0"}
 NEUTRON_DEVICE=${NEUTRON_DEVICE:-"eth1"}
-
+VIRT_TYPE=${VIRT_TYPE:-"qemu"}
 
 if [ "$WHOAMI" != "root" ];then
   echo "Please escalate to root."
@@ -65,7 +67,7 @@ apt-get update
 
 # Install LXC
 apt-get -y install lxc python3-lxc lxc-templates liblxc1 \
-                   git lvm2 git python-dev haproxy
+                   git lvm2 git python-dev haproxy cpu-checker
 
 echo "Setting up HAProxy"
 cp $(pwd)/haproxy.cfg /etc/haproxy/haproxy.cfg
@@ -233,6 +235,7 @@ sudo su -c "knife cookbook upload -a -o \${COOKBOOKS}"
 EOL
 
 echo "Creating rpcs environment ini"
+
 ${USER_SSH} <<EOL
 # Drop the environment ini in place.
 ERLANG_COOKIE=\$(sudo cat /var/lib/rabbitmq/.erlang.cookie)
@@ -252,7 +255,7 @@ pki = False
 scheduler_filters = AvailabilityZoneFilter,RetryFilter
 
 # Libvirt
-virt_type = qemu
+virt_type = ${VIRT_TYPE}
 
 # Nova Networks Configuration
 ipv4_cidr = 10.0.3.0/24
@@ -280,8 +283,12 @@ EOF
 EOL
 
 echo "Creating rpcs environment"
+# this script is a hack until the vnc proxy bits make it upstream
+# ref: https://github.com/rcbops/chef-cookbooks/issues/927
 scp env_patch.py ${CONTAINER_USER}@10.0.3.100:/home/${CONTAINER_USER}/env_patch.py
 SYS_IP=$(ip a l ${PRIMARY_DEVICE} | grep -w inet | awk -F" " '{print $2}'| sed -e 's/\/.*$//')
+
+# When the perviously patch is taken care of remove the `env_patch.py` script.
 ${USER_SSH} <<EOL
 mungerator -C rpcs.ini create-env neutron
 python env_patch.py ${CONTAINER_USER} ${SYS_IP}
