@@ -235,6 +235,11 @@ ${USER_SSH} <<EOL
 sudo /etc/init.d/ssh restart
 EOL
 
+${USER_SSH} <<EOL
+echo "nameserver 10.0.3.1" | sudo tee /etc/resolvconf/resolv.conf.d/original
+echo "search localdomain" | sudo tee -a /etc/resolvconf/resolv.conf.d/original
+EOL
+
 echo "Installing Everything"
 ${USER_SSH} <<EOL
 export COOKBOOK_VERSION="${COOKBOOK_VERSION}"
@@ -282,6 +287,9 @@ image_upload = False
 username = admin
 password = secrete
 pki = False
+
+# Metric Monitoring
+disable_metrics = True
 
 # Nova
 scheduler_filters = AvailabilityZoneFilter,RetryFilter
