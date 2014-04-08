@@ -41,6 +41,15 @@ function udev_truncate() {
 EOF
 }
 
+# Truncate the contents of our net rules
+function remove_leases() {
+    for i in /var/lib/dhcp/*; do 
+      if [ -f "$i" ];then
+          rm "$i"
+      fi
+    done
+}
+
 # Stop Swap
 function stop_swap() {
   SWAPFILE="/tmp/SwapFile"
@@ -57,11 +66,21 @@ function stop_swap() {
 # Stop the VM services
 function stop_vm() {
   # Stop all containers
-  for i in $(/usr/bin/lxc-ls); do /usr/bin/lxc-stop -n $i || true; done
+  for i in $(/usr/bin/lxc-ls); do 
+      /usr/bin/lxc-stop -n $i || true
+  done
 
   # Flush all of the routes on the system
   ip route flush all
   sync
+}
+
+# Start the VM services
+function start_vm() {
+  # Stop all containers
+  for i in $(/usr/bin/lxc-ls); do 
+      /usr/bin/lxc-start -d -n $i || true
+  done
 }
 
 # Service functions
@@ -73,18 +92,20 @@ case "$1" in
     /opt/swap.sh
     /opt/cinder.sh
     /opt/motd.sh
-    for i in $(/usr/bin/lxc-ls); do /usr/bin/lxc-start -d -n $i || true; done
+    start_vm
   ;;
   stop)
     echo "${PROGRAM} is Shutting Down..."
     stop_vm
     stop_swap
     udev_truncate
+    remove_leases
   ;;
   package-instance)
     stop_vm
     stop_swap
     udev_truncate
+    remove_leases
 
     echo "Performing A Zero Fill"
     set +e
