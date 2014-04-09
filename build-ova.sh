@@ -34,6 +34,8 @@ WHOAMI=$(whoami)
 PASSWD=${PASSWD:-"secrete"}
 CONTAINER_USER=${CONTAINER_USER:-"openstack"}
 COOKBOOK_VERSION=${COOKBOOK_VERSION:-"v4.2.2"}
+CHEF_CLIENT_URL=${CHEF_URL:-"https://www.opscode.com/chef/install.sh"}
+CHEF_CLIENT_VERSION=${CHEF_VERSION:-"11.10.4-1"}
 PRIMARY_DEVICE=${PRIMARY_DEVICE:-"eth0"}
 NEUTRON_DEVICE=${NEUTRON_DEVICE:-"eth1"}
 VIRT_TYPE=${VIRT_TYPE:-"qemu"}
@@ -218,6 +220,20 @@ sleep 5
 
 USER_SSH="ssh -o StrictHostKeyChecking=no ${CONTAINER_USER}@10.0.3.100"
 
+# Set hostnames
+if [ ! "$(grep "10.0.3.100 controller1" /etc/hosts)" ];then
+    echo "10.0.3.100 controller1" | tee -a /etc/hosts
+fi
+if [ ! "$(grep "10.0.3.101 controller1" /etc/hosts)" ];then
+    echo "10.0.3.101 controller1" | tee -a /etc/hosts
+fi
+
+# Install chef-client
+bash <(wget -O - ${CHEF_CLIENT_URL}) -v ${CHEF_CLIENT_VERSION}
+
+# Get Hostname
+HOSTNAME=$(hostname)
+
 # Basic Setup
 echo "Creating SSH Key"
 ${USER_SSH} <<EOL
@@ -235,16 +251,20 @@ ${USER_SSH} <<EOL
 sudo /etc/init.d/ssh restart
 EOL
 
+echo "Setup DNS resolver and Hostname"
 ${USER_SSH} <<EOL
 echo "nameserver 10.0.3.1" | sudo tee /etc/resolvconf/resolv.conf.d/original
 echo "search localdomain" | sudo tee -a /etc/resolvconf/resolv.conf.d/original
+if [ ! "$(grep "10.0.3.1 ${HOSTNAME}" /etc/hosts)" ];then
+    echo "10.0.3.1 ${HOSTNAME}" | sudo tee -a /etc/hosts
+fi
 EOL
 
-echo "Installing Everything"
+echo "Installing Everything Else"
 ${USER_SSH} <<EOL
 export COOKBOOK_VERSION="${COOKBOOK_VERSION}"
 export GITHUB="https://raw.github.com"
-cat > install_all.sh<<EOF
+cat > install_all.sh <<EOF
 curl \${GITHUB}/pypa/pip/master/contrib/get-pip.py | python
 curl \${GITHUB}/rcbops/support-tools/master/chef-install/install-chef-rabbit-cookbooks.sh | bash
 rabbitmq-plugins enable rabbitmq_shovel
@@ -259,7 +279,7 @@ EOL
 
 echo "Patching Nova VNC"
 ${USER_SSH} <<EOL
-COOKBOOKS="/opt/rpc/chef-cookbooks/cookbooks"
+COOKBOOKS="/opt/rpcs/chef-cookbooks/cookbooks"
 NOVACP="\${COOKBOOKS}/nova/templates/default/partials"
 VNCCP="\${NOVACP}/vncproxy-options.partial.erb"
 sudo su -c "sed -i 's/xvpvncproxy_host=.*/xvpvncproxy_host=10.0.3.100/' \${VNCCP}"
@@ -268,7 +288,7 @@ EOL
 
 echo "Uploading cookbooks"
 retry_process ${USER_SSH} <<EOL
-COOKBOOKS="/opt/rpc/chef-cookbooks/cookbooks"
+COOKBOOKS="/opt/rpcs/chef-cookbooks/cookbooks"
 sudo su -c "knife cookbook upload -a -o \${COOKBOOKS}"
 EOL
 
@@ -345,9 +365,20 @@ ${USER_SSH} <<EOL
 sudo su -c "sshpass -p ${PASSWD} ssh-copy-id root@10.0.3.1"
 EOL
 
+# This next block is due to a change in chef which relates to an 
+# OpenSSL security issue
+# http://www.getchef.com/blog/2014/04/08/openssl-heartbleed-security-update/
+# Create the path to the trusted certs dir for chef and send over the chef cert
+mkdir -p /etc/chef/trusted_certs/
+echo "Get the chef-server host cert"
+${USER_SSH} <<EOL
+sudo su -c "scp /var/opt/chef-server/nginx/ca/controller1.crt root@10.0.3.1:/etc/chef/trusted_certs/"
+EOL
+
+
 echo "Bootstrapping the controller node"
 retry_process ${USER_SSH} <<EOL
-sudo su -c "knife bootstrap -E rpcs -r role[ha-controller1],role[heat-all] localhost"
+sudo su -c "knife bootstrap -E rpcs -r role[ha-controller1],role[heat-all] controller1"
 EOL
 
 echo "Bootstrapping the compute, cinder, neutron node"
