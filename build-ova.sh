@@ -263,11 +263,11 @@ EOL
 echo "Installing Everything Else"
 ${USER_SSH} <<EOL
 export COOKBOOK_VERSION="${COOKBOOK_VERSION}"
-export TOOLS="https://github.com/rcbops/support-tools"
 cat > install_all.sh <<EOF
-git clone \${TOOLS} /opt/tools
+git clone https://github.com/rcbops/support-tools /opt/tools
 wget https://bootstrap.pypa.io/get-pip.py -P /opt/tools
 python /opt/tools/get-pip.py
+
 bash /opt/tools/chef-install/install-chef-rabbit-cookbooks.sh
 rabbitmq-plugins enable rabbitmq_shovel
 rabbitmq-plugins enable rabbitmq_management
