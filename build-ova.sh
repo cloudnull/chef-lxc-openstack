@@ -266,7 +266,7 @@ export COOKBOOK_VERSION="${COOKBOOK_VERSION}"
 export TOOLS="https://github.com/rcbops/support-tools"
 cat > install_all.sh <<EOF
 git clone \${TOOLS} /opt/tools
-wget https://bootstrap.pypa.io/get-pip.py -p /opt/tools
+wget https://bootstrap.pypa.io/get-pip.py -P /opt/tools
 python /opt/tools/get-pip.py
 bash /opt/tools/chef-install/install-chef-rabbit-cookbooks.sh
 rabbitmq-plugins enable rabbitmq_shovel
