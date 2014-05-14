@@ -201,7 +201,7 @@ lxc-create -n controller1 \
            -t defiant \
            -f /etc/lxc/lxc-defiant.conf \
            -- \
-           -o curl,wget,iptables,python-dev,sshpass \
+           -o curl,wget,iptables,python-dev,sshpass,git-core \
            -I eth0=10.0.3.100=255.255.255.0=10.0.3.1 \
            -I eth1=10.0.3.101=255.255.255.0 \
            -S /root/.ssh/id_rsa.pub \
@@ -263,10 +263,12 @@ EOL
 echo "Installing Everything Else"
 ${USER_SSH} <<EOL
 export COOKBOOK_VERSION="${COOKBOOK_VERSION}"
-export GITHUB="https://raw.github.com"
+export TOOLS="https://github.com/rcbops/support-tools"
 cat > install_all.sh <<EOF
-curl \${GITHUB}/pypa/pip/master/contrib/get-pip.py | python
-curl \${GITHUB}/rcbops/support-tools/master/chef-install/install-chef-rabbit-cookbooks.sh | bash
+git clone \${TOOLS} /opt/tools
+wget https://bootstrap.pypa.io/get-pip.py -p /opt/tools
+python /opt/tools/get-pip.py
+bash /opt/tools/chef-install/install-chef-rabbit-cookbooks.sh
 rabbitmq-plugins enable rabbitmq_shovel
 rabbitmq-plugins enable rabbitmq_management
 rabbitmq-plugins enable rabbitmq_shovel_management
