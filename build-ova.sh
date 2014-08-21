@@ -28,7 +28,7 @@
 #   MAX_RETRIES=The Max number of times to retry an operation before quiting.
 #               The default is set to 5.
 
-set -e -u -x
+set -e -u -x -v
 
 WHOAMI=$(whoami)
 PASSWD=${PASSWD:-"secrete"}
@@ -170,7 +170,33 @@ if [ -d "lxc_defiant" ];then
 fi
 git clone https://github.com/cloudnull/lxc_defiant lxc_defiant
 cp lxc_defiant/lxc-defiant.py /usr/share/lxc/templates/lxc-defiant
-cp lxc_defiant/defiant.common.conf /usr/share/lxc/config/defiant.common.conf
+
+cat > /usr/share/lxc/config/defiant.common.conf <<EOF
+ Default pivot location
+lxc.pivotdir = lxc_putold
+
+# Default mount entries
+lxc.mount.entry = proc proc proc nodev,noexec,nosuid 0 0
+lxc.mount.entry = sysfs sys sysfs defaults 0 0
+lxc.mount.entry = /sys/fs/fuse/connections sys/fs/fuse/connections none bind,optional 0 0
+lxc.mount.entry = /sys/kernel/debug sys/kernel/debug none bind,optional 0 0
+lxc.mount.entry = /sys/kernel/security sys/kernel/security none bind,optional 0 0
+lxc.mount.entry = /sys/fs/pstore sys/fs/pstore none bind,optional 0 0
+
+# Default console settings
+lxc.devttydir = lxc
+lxc.tty = 4
+lxc.pts = 1024
+
+# Default capabilities
+lxc.cap.drop = mac_admin mac_override sys_time
+lxc.cgroup.devices.allow = a *:* rwm
+
+lxc.start.auto = 1
+lxc.group = rpc_controllers
+lxc.aa_profile = unconfined
+EOF
+
 
 # Update the lxc-defiant.conf file
 cat > /etc/lxc/lxc-defiant.conf <<EOF
@@ -211,8 +237,9 @@ lxc-create -n controller1 \
            --sudo-no-password \
            -L /var/log/controller1_logs=var/log
 
-echo "lxc.start.auto = 1" | tee -a /var/lib/lxc/controller1/config
-echo "lxc.group = rpc_controllers" | tee -a /var/lib/lxc/controller1/config
+echo "" | tee -a /var/lib/lxc/controller1/config
+echo "" | tee -a /var/lib/lxc/controller1/config
+echo "" | tee -a /var/lib/lxc/controller1/config
 lxc-start -d -n controller1
 
 echo "Resting after container construction."
@@ -260,6 +287,15 @@ if [ ! "$(grep "10.0.3.1 ${HOSTNAME}" /etc/hosts)" ];then
 fi
 EOL
 
+# This next block is due to a logic bomb that is happening with the keystone log
+# being created and ownership changing to the keystone user but the keystone user
+# does not exist.
+echo "Create the keystone user on controller1"
+useradd -m -s /bin/false -d /var/lib/keystone keystone || true
+${USER_SSH} <<EOL
+sudo su -c "useradd -m -s /bin/false -d /var/lib/keystone keystone || true"
+EOL
+
 echo "Installing Everything Else"
 ${USER_SSH} <<EOL
 export COOKBOOK_VERSION="${COOKBOOK_VERSION}"
@@ -272,7 +308,6 @@ bash /opt/tools/chef-install/install-chef-rabbit-cookbooks.sh
 rabbitmq-plugins enable rabbitmq_shovel
 rabbitmq-plugins enable rabbitmq_management
 rabbitmq-plugins enable rabbitmq_shovel_management
-pip install git+https://github.com/cloudnull/mungerator
 EOF
 
 sudo su -c "export COOKBOOK_VERSION=\"${COOKBOOK_VERSION}\"; \
@@ -288,6 +323,22 @@ sudo su -c "sed -i 's/xvpvncproxy_host=.*/xvpvncproxy_host=10.0.3.100/' \${VNCCP
 sudo su -c "sed -i 's/novncproxy_host=.*/novncproxy_host=10.0.3.100/' \${VNCCP}"
 EOL
 
+# Because chef is stupid we need to make sysctl go away.
+echo "Patching sysctl"
+${USER_SSH} <<EOL
+sudo su -c "sed -i '/template/,/end/g' /opt/rpcs/chef-cookbooks/cookbooks/sysctl/recipes/default.rb"
+sudo su -c "sed -i '/file\ get_path/,/end/d' /opt/rpcs/chef-cookbooks/cookbooks/sysctl/recipes/default.rb"
+sudo su -c "sed -i '/execute/,/^end/d' /opt/rpcs/chef-cookbooks/cookbooks/sysctl/recipes/default.rb"
+
+sudo su -c "sed -i '/template/,/end/g' /opt/rpcs/chef-cookbooks/cookbooks/sysctl/providers/multi.rb"
+sudo su -c "sed -i '/file\ get_path/,/end/d' /opt/rpcs/chef-cookbooks/cookbooks/sysctl/providers/multi.rb"
+sudo su -c "sed -i '/execute/,/end/d' /opt/rpcs/chef-cookbooks/cookbooks/sysctl/providers/multi.rb"
+
+sudo su -c "sed -i '/template/,/end/g' /opt/rpcs/chef-cookbooks/cookbooks/sysctl/providers/default.rb"
+sudo su -c "sed -i '/file\ get_path/,/end/d' /opt/rpcs/chef-cookbooks/cookbooks/sysctl/providers/default.rb"
+sudo su -c "sed -i '/execute/,/end/d' /opt/rpcs/chef-cookbooks/cookbooks/sysctl/providers/default.rb"
+EOL
+
 echo "Uploading cookbooks"
 retry_process ${USER_SSH} <<EOL
 COOKBOOKS="/opt/rpcs/chef-cookbooks/cookbooks"
@@ -298,49 +349,94 @@ echo "Creating rpcs environment ini"
 ${USER_SSH} <<EOL
 # Drop the environment ini in place.
 ERLANG_COOKIE=\$(sudo cat /var/lib/rabbitmq/.erlang.cookie)
-cat > rpcs.ini <<EOF
-[ChefOpenstack]
-env_name = rpcs
-
-# Glance
-image_upload = False
-
-# Keystone
-username = admin
-password = secrete
-pki = False
-
-# Metric Monitoring
-disable_metrics = True
-
-# Nova
-scheduler_filters = AvailabilityZoneFilter,RetryFilter
-
-# Libvirt
-virt_type = ${VIRT_TYPE}
-
-# Nova Networks Configuration
-ipv4_cidr = 10.0.3.0/24
-
-# RabbitMQ
-rabbit_address = 10.0.3.100
-erlang_cookie = \${ERLANG_COOKIE}
-
-# Neutron Configuration
-label = ph-${NEUTRON_DEVICE}
-bridge = br-${NEUTRON_DEVICE}
-vlans = 1024:1024
-
-# OS Networks
-interface_bridge = br-${NEUTRON_DEVICE}
-management_net = 10.0.3.0/24
-nova_net = 10.0.3.0/24
-public_net = 10.0.3.0/24
-
-# MySQL
-mysql_network_acl = 0.0.0.0
-
-add_users = demo=secrete=demo|demo2,demo2=secrete=demo2|demo
+cat > rpcs.json <<EOF
+{
+  "name": "rpcs",
+  "description": "Environment for Rackspace Private Cloud (Havana)",
+  "cookbook_versions": {},
+  "json_class": "Chef::Environment",
+  "chef_type": "environment",
+  "default_attributes": {
+  },
+  "override_attributes": {
+    "rabbitmq": {
+      "cluster": true,
+      "erlang_cookie": "\${ERLANG_COOKIE}",
+      "open_file_limit": 4096,
+      "use_distro_version": false
+    },
+    "enable_monit": true,
+    "monitoring" : {
+      "procmon_provider" : "monit"
+    },
+    "keystone": {
+      "tenants": [
+        "admin",
+        "service"
+      ],
+      "users": {
+        "admin": {
+          "password": "${PASSWD}",
+          "roles": {
+            "admin": [
+              "admin"
+            ]
+          }
+        }
+      },
+      "admin_user": "admin",
+      "pki": {
+        "enabled": false
+      }
+    },
+    "nova": {
+      "libvirt": {
+        "vncserver_listen": "0.0.0.0"
+      },
+      "config": {
+        "ram_allocation_ratio": 1.0,
+        "cpu_allocation_ratio": 2.0,
+        "disk_allocation_ratio": 1.0,
+        "resume_guests_state_on_host_boot": false,
+        "use_single_default_gateway": false,
+        "force_config_drive": true
+      },
+      "scheduler": {
+        "default_filters": [
+          "AvailabilityZoneFilter",
+          "RetryFilter"
+        ]
+      },
+      "network": {
+        "provider": "neutron"
+      }
+    },
+    "neutron": {
+      "ovs": {
+        "provider_networks": [
+          {
+            "label": "ph-${NEUTRON_DEVICE}",
+            "bridge": "br-${NEUTRON_DEVICE}",
+            "vlans": "1:1000"
+          }
+        ],
+        "network_type": "gre"
+      }
+    },
+    "mysql": {
+      "mysql_network_acl": "0.0.0.0",
+      "allow_remote_root": true,
+      "tunable": {
+        "log_queries_not_using_index": false
+      }
+    },
+    "osops_networks": {
+      "nova": "10.0.3.0/24",
+      "public": "10.0.3.0/24",
+      "management": "10.0.3.0/24"
+    }
+  }
+}
 EOF
 EOL
 
@@ -352,7 +448,6 @@ SYS_IP=$(ip a l ${PRIMARY_DEVICE} | grep -w inet | awk -F" " '{print $2}'| sed -
 
 # When the perviously patch is taken care of remove the `env_patch.py` script.
 retry_process ${USER_SSH} <<EOL
-mungerator -C rpcs.ini create-env neutron
 python env_patch.py ${CONTAINER_USER} ${SYS_IP}
 sudo su -c "knife environment from file /home/${CONTAINER_USER}/rpcs.json"
 EOL
@@ -376,7 +471,6 @@ echo "Get the chef-server host cert"
 ${USER_SSH} <<EOL
 sudo su -c "scp /var/opt/chef-server/nginx/ca/controller1.crt root@10.0.3.1:/etc/chef/trusted_certs/"
 EOL
-
 
 echo "Bootstrapping the controller node"
 retry_process ${USER_SSH} <<EOL
@@ -571,6 +665,3 @@ fi
 cp $(pwd)/rax-rebuild /etc/init.d/rax-rebuild 
 chmod +x /etc/init.d/rax-rebuild
 update-rc.d rax-rebuild defaults
-
-# Restart the host post deployment
-shutdown -r now
