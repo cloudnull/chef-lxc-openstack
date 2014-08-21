@@ -224,11 +224,6 @@ if [ "$(lxc-ls --fancy | grep controller1)" ];then
   lxc-destroy -n controller1 -f 
 fi
 
-# Remove the chef dir if found
-if [ -f "/etc/chef" ];then
-  rm -rf /etc/chef
-fi
-
 lxc-create -n controller1 \
            -t defiant \
            -f /etc/lxc/lxc-defiant.conf \
@@ -482,6 +477,11 @@ echo "Bootstrapping the controller node"
 retry_process ${USER_SSH} <<EOL
 sudo su -c "knife bootstrap -E rpcs -r role[ha-controller1],role[heat-all] controller1"
 EOL
+
+# Remove the chef dir if found
+if [ -d "/etc/chef" ];then
+  rm -rf /etc/chef
+fi
 
 echo "Bootstrapping the compute, cinder, neutron node"
 retry_process ${USER_SSH} <<EOL
