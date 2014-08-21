@@ -219,8 +219,14 @@ if [ ! "$(grep -w "${CONTAINER_USER}" /etc/sudoers)" ];then
   echo "${CONTAINER_USER} ALL = NOPASSWD: ALL" | tee -a /etc/sudoers
 fi
 
+# Destroy the controller node if found
 if [ "$(lxc-ls --fancy | grep controller1)" ];then
   lxc-destroy -n controller1 -f 
+fi
+
+# Remove the chef dir if found
+if [ -f "/etc/chef" ];then
+  rm -rf /etc/chef
 fi
 
 lxc-create -n controller1 \
